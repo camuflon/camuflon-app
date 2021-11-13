@@ -2,18 +2,50 @@ import React from 'react';
 import {useNavigation} from '@react-navigation/native';
 import {View, Text, Button} from 'react-native-ui-lib'; //eslint-disable-line
 import TextInput from '../../components/TextInput';
+import {signIn} from '../../utils/api';
+import {
+  storageSetBeaconsId,
+  storageSetCompanyId,
+  storageSetUserId,
+} from '../../utils/storage';
+
 export default function LoginPage() {
   const [company, setCompany] = React.useState('');
   const [token, setToken] = React.useState('');
+  const [uid, setUid] = React.useState('');
   const [error, setError] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
 
   const navigation = useNavigation();
 
-  const onSignIn = () => {
-    /*  () => {
-      navigation.navigate('Details');
-    }*/
-    navigation.navigate('Home');
+  const resetForm = () => {
+    setCompany('');
+    setToken('');
+    setUid('');
+  };
+
+  const saveUserData = async userData => {
+    console.log('my data', userData);
+    await storageSetUserId(userData.userId);
+    await storageSetBeaconsId(userData.beaconsUUID);
+    await storageSetCompanyId(userData.companyId);
+  };
+  const onSignIn = async () => {
+    setError('');
+    if (!token || !company) {
+      setError('Fill all fields');
+      return;
+    }
+    setLoading(true);
+    const res = await signIn(company, token, uid);
+    if (res) {
+      await saveUserData(res);
+      resetForm();
+      navigation.navigate('Home');
+    } else {
+      setError('Failed to authenticate');
+    }
+    setLoading(false);
   };
   return (
     <View style={{flex: 1, backgroundColor: 'black'}}>
@@ -42,15 +74,21 @@ export default function LoginPage() {
           text={token}
           onChangeText={text => setToken(text)}
         />
+        <TextInput
+          placeholder="Uid (optional)"
+          text={uid}
+          onChangeText={text => setUid(text)}
+        />
       </View>
       {error.length > 0 && (
         <Text text80M style={{textAlign: 'center', color: 'red'}}>
-          Failed to authenticate
+          {error}
         </Text>
       )}
       <Button
-        label={'Sign in'}
+        label={loading ? 'loading...' : 'Sign in'}
         size={Button.sizes.large}
+        disabled={loading}
         style={{
           marginBottom: 20,
           marginTop: 20,

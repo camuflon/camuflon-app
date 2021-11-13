@@ -10,8 +10,10 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@react-native-community/async-storage": "1.12.1",
     "@react-navigation/native": "5.0.3",
     "@react-navigation/native-stack": "5.0.3",
+    "axios": "0.24.0",
     "react": "16.9.0",
     "react-native": "0.61.5",
     "react-native-beacons-manager": "1.0.7",

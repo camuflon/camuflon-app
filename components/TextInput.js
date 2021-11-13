@@ -8,7 +8,7 @@ export default function CustomTextInput({text, onChangeText, placeholder}) {
         <TextInput
           placeholder={placeholder}
           style={{
-            backgroundColor: 'darkgrey',
+            backgroundColor: '#eee',
             borderRadius: 10,
             color: 'black',
             borderWidth: 2,
