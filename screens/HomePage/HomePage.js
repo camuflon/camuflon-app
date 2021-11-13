@@ -1,83 +1,128 @@
 import React from 'react';
+import {NativeModules, NativeEventEmitter} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
-import {View, Text, Button} from 'react-native-ui-lib'; //eslint-disable-line
-import TextInput from '../../components/TextInput';
+import {View, Text, Button} from 'react-native-ui-lib';
+import BleManager from 'react-native-ble-manager';
 import Icon from 'react-native-vector-icons/AntDesign';
 import InfoItem from '../../components/InfoItem';
-import {getStats} from '../../utils/api';
+import {postStats} from '../../utils/api';
+import {getBluetoothScanPermission, getFormattedTime} from '../../utils/utils';
 import {
-  storageGetBeaconsId,
   storageGetCompanyId,
   storageGetPause,
   storageGetUserId,
   storageReset,
   storageSetPause,
 } from '../../utils/storage';
+import {TouchableWithoutFeedback} from 'react-native';
 
-const data = [
-  {
-    beaconMajor: 'MMMMMMM',
-    beaconMinor: '000000',
-  },
-  {
-    beaconMajor: 'NNNN',
-    beaconMinor: '000000',
-  },
-  {
-    beaconMajor: 'OOO',
-    beaconMinor: '000000',
-  },
-];
-
-function getFormattedTime(date) {
-  var time =
-    date.getHours() + ':' + date.getMinutes() + ':' + date.getSeconds();
-  return time;
-}
+const DEV_PREFIX = 'BS3046';
 export default function HomePage() {
   const [company, setCompany] = React.useState('Mycompany');
-  const [room, setRoom] = React.useState('Kitchen');
+  const [room, setRoom] = React.useState('');
   const [beaconId, setBeaconId] = React.useState('');
-  const [beaconMinor, setBeaconMinor] = React.useState('');
-  const [beaconMajor, setBeaconMajor] = React.useState('');
   const [userId, setUserId] = React.useState('');
   const [pause, setPause] = React.useState(false);
-
+  const [loading, setLoading] = React.useState(false);
+  const eventEmitter = new NativeEventEmitter(NativeModules.BleManager);
   const [dt, setDt] = React.useState(new Date());
+  const [isFirstScan, setIsFirstScan] = React.useState(true);
 
   const navigation = useNavigation();
 
   React.useEffect(() => {
+    const susbcription1 = eventEmitter.addListener(
+      'BleManagerDiscoverPeripheral',
+      connectionCallback,
+    );
+    const susbcription2 = eventEmitter.addListener(
+      'BleManagerStopScan',
+      handleStopScan,
+    );
+    return () => {
+      console.log('unmount');
+      susbcription1.remove();
+      susbcription2.remove();
+    };
+  }, []);
+
+  const isDeviceFound = dev => {
+    return dev && dev.includes(DEV_PREFIX);
+  };
+
+  const connectionCallback = async data => {
+    console.log('CONNN CALLBAK');
+    const id = data.advertising ? data.advertising.localName : null;
+    console.log(data.name);
+    if (!beaconId && isDeviceFound(id)) {
+      setBeaconId(id);
+    }
+  };
+
+  //scanning
+  const scanAndConnect = async () => {
+    if (loading || pause) {
+      console.log('RETURNING!');
+      return;
+    }
+    setLoading(true);
+    setTimeout(() => setLoading(false), 2000);
+    console.log('starting scanning');
+    try {
+      await BleManager.start({forceLegacy: true});
+      console.log('check location access permission');
+      await getBluetoothScanPermission();
+      console.log('scanning');
+      await BleManager.scan([], 2);
+    } catch (e) {
+      console.log('err', e);
+    }
+  };
+
+  //time
+  React.useEffect(() => {
     let secTimer = setInterval(() => {
       setDt(new Date());
     }, 1000);
-
     return () => clearInterval(secTimer);
   }, []);
 
   React.useEffect(() => {
-    let checkRoom = setInterval(() => {
-      !pause && onUpdateRoom(data[Math.floor(Math.random() * data.length)]);
-    }, 5000);
+    if (userId) {
+      if (isFirstScan) {
+        scanAndConnect();
+        setIsFirstScan(false);
+      }
+      let scan = setInterval(() => {
+        scanAndConnect();
+      }, 12000);
+      return () => clearInterval(scan);
+    }
+  }, [userId]);
 
-    return () => clearInterval(checkRoom);
-  }, [pause]);
+  const handleStopScan = async () => {
+    console.log('finish scan');
+    try {
+      setLoading(false);
+    } catch (e) {
+      console.log('error connecting to Device :)');
+    }
+  };
 
   React.useEffect(() => {
     (async () => {
       const pause = await storageGetPause();
       const companyId = await storageGetCompanyId();
       const uid = await storageGetUserId();
-      const beaconsId = await storageGetBeaconsId();
-      if (!uid || !beaconsId || !companyId) {
+      if (!uid || !companyId) {
         //user is log out
         navigation.navigate('Login');
       } else {
         //user is logged in
+        console.log('MY USER IDDD', uid);
         setPause(pause ? pause : false);
         setCompany(companyId);
         setUserId(uid);
-        setBeaconId(beaconsId);
       }
     })();
   }, []);
@@ -87,22 +132,25 @@ export default function HomePage() {
     navigation.navigate('Login');
   };
 
-  const onUpdateRoom = async ({beaconMajor, beaconMinor}) => {
-    if (pause) {
+  const onUpdateRoom = async () => {
+    if (pause || !beaconId) {
+      console.log('why returning', beaconId);
       return;
     }
-    const data = await getStats(
+    const data = await postStats(
       company,
-      beaconMajor,
-      beaconMinor,
       userId,
+      beaconId,
       new Date().toISOString(),
     );
 
     if (data) {
       setRoom(data.locationName);
+    } else {
+      setRoom('');
     }
   };
+  console.log('MY CURRENT', beaconId);
   return (
     <View style={{flex: 1, backgroundColor: 'black'}}>
       {/*header */}
@@ -138,16 +186,27 @@ export default function HomePage() {
       </View>
       {/*info */}
       <View style={{marginTop: 50, flexDirection: 'column'}}>
-        <Text
-          text65M
-          margin-15
-          style={{textAlign: 'center', color: 'white', fontWeight: 'bold'}}>
-          Info
-        </Text>
-        <InfoItem property="Room: " value={room ? room : 'no room'} />
+        <TouchableWithoutFeedback
+          onPress={async () => {
+            await onUpdateRoom(beaconId);
+          }}>
+          <Text
+            text65M
+            margin-15
+            style={{textAlign: 'center', color: 'white', fontWeight: 'bold'}}>
+            Info
+          </Text>
+        </TouchableWithoutFeedback>
+        <InfoItem
+          property="Room: "
+          value={room ? room : pause ? 'Pause' : 'Loading...'}
+        />
         <InfoItem property="Uid:" value={userId} />
         <InfoItem property="Company:" value={company} />
-        <InfoItem property="Beacon: " value={beaconId} />
+        <InfoItem
+          property="Beacon: "
+          value={beaconId ? beaconId : pause ? 'Pause' : 'Loading...'}
+        />
       </View>
       <View>
         <Button

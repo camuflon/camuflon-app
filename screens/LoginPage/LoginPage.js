@@ -3,11 +3,7 @@ import {useNavigation} from '@react-navigation/native';
 import {View, Text, Button} from 'react-native-ui-lib'; //eslint-disable-line
 import TextInput from '../../components/TextInput';
 import {signIn} from '../../utils/api';
-import {
-  storageSetBeaconsId,
-  storageSetCompanyId,
-  storageSetUserId,
-} from '../../utils/storage';
+import {storageSetCompanyId, storageSetUserId} from '../../utils/storage';
 
 export default function LoginPage() {
   const [company, setCompany] = React.useState('');
@@ -27,7 +23,6 @@ export default function LoginPage() {
   const saveUserData = async userData => {
     console.log('my data', userData);
     await storageSetUserId(userData.userId);
-    await storageSetBeaconsId(userData.beaconsUUID);
     await storageSetCompanyId(userData.companyId);
   };
   const onSignIn = async () => {
